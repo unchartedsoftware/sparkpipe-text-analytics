@@ -1,6 +1,10 @@
-MIT License
+Copyright © 2013-2017 Uncharted Software Inc.
 
-Copyright (c) 2017 Uncharted Software
+Property of Uncharted™, formerly Oculus Info Inc.
+
+http://uncharted.software/
+
+Release under the MIT License.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
