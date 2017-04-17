@@ -1,5 +1,5 @@
 description = "Sparkpipe text processing and analytic operations developed for the XDATA project"
-group = "software.uncharted"
+group = "software.uncharted.sparkpipe"
 version = "0.1.0-SNAPSHOT"
 
 // project level shared version variables
@@ -79,34 +79,21 @@ scalaStyle {
 //}
 
 // Test and scoverage tests should be forced to single threaded execution
-// since Spark can't run multiple contexts within in a single JVM.  We ignore
-// tests relying on external systems (HBase + S3) by default, but they can be
-// include by adding -PincludeExternalTests to the command line.  Running tests on
-// a closed build environment like Bamboo block all IO, so an option is provided
-// to block those via -PexcludeIoTests.
+// since Spark can't run multiple contexts within in a single JVM.
 test {
   maxParallelForks = 1
-  if (project.hasProperty('excludeIoTests')) {
-    tags {
-      exclude 'fileio.test'
-    }
-  }
 }
 
 testScoverage {
   maxParallelForks = 1
-  if (project.hasProperty('excludeIoTests')) {
-    tags {
-      exclude 'fileio.test'
-    }
-  }
 }
 
 // target 1.7 JVM
 sourceCompatibility = 1.7
 targetCompatibility = 1.7
 
-// repositories for dependencies
+// repositories for dependencies - use environment variables to configure an internal
+// maven repository such as an Artifactory instance to install artifacts to.
 repositories {
   mavenCentral()
   mavenLocal()
