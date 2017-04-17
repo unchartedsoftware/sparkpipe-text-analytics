@@ -1,0 +1,169 @@
+description = "Sparkpipe text processing and analytic operations developed for the XDATA project"
+group = "software.uncharted"
+version = "0.1.0-SNAPSHOT"
+
+// project level shared version variables
+ext {
+  dependencyScalaVersion = "2.11"
+  scalaVersion = "2.11.8"
+  sparkVersion = "2.0.1"
+  cdhVersion="1.2.3"
+}
+
+// extra jars for plugins
+buildscript {
+  repositories {
+    mavenCentral()
+    jcenter()
+    maven {
+      url = "https://repository.cloudera.com/artifactory/cloudera-repos"
+    }
+  }
+
+  dependencies {
+    classpath "com.github.maiflai:gradle-scalatest:0.10"
+    classpath 'org.scoverage:gradle-scoverage:1.0.9'
+    classpath "org.github.ngbinh.scalastyle:gradle-scalastyle-plugin_2.11:0.8.2"
+  }
+}
+
+apply plugin: 'scala'
+apply plugin: 'maven'
+apply plugin: 'maven-publish'
+apply plugin: 'idea'
+apply plugin: 'scalaStyle'
+apply plugin: 'scoverage'
+apply plugin: 'com.github.maiflai.scalatest'
+
+// run scala style and code coverage checks as part of the check phase
+check.dependsOn "scalaStyle"
+//check.dependsOn "checkScoverage"
+
+
+// task to update the gradle wrapper
+task wrapper(type: Wrapper) {
+  gradleVersion = '2.13'
+}
+
+// extra configurations
+configurations {
+  provided
+  compile.extendsFrom provided
+  // IntelliJ is picking up an old version of jetty that we need to
+  // force exclude to run tests.
+  provided.exclude group: "org.jboss.netty", module: "netty"
+}
+
+// configure the idea plugin
+idea {
+  module {
+    inheritOutputDirs = false
+    outputDir = file("$buildDir/classes/main/")
+    scopes.PROVIDED.plus += [ configurations.provided ]
+  }
+}
+
+// configure scala style checking plugin
+scalaStyle {
+  configLocation = "scalastyle_config.xml"
+  includeTestSourceDirectory = true
+  source = sourceSets.main.allScala
+  testSource = sourceSets.test.allScala
+  failOnWarning = true
+  verbose = true
+}
+
+// configure scoverage plugin
+//checkScoverage {
+//  minimumRate = 0.75
+//}
+
+// Test and scoverage tests should be forced to single threaded execution
+// since Spark can't run multiple contexts within in a single JVM.  We ignore
+// tests relying on external systems (HBase + S3) by default, but they can be
+// include by adding -PincludeExternalTests to the command line.  Running tests on
+// a closed build environment like Bamboo block all IO, so an option is provided
+// to block those via -PexcludeIoTests.
+test {
+  maxParallelForks = 1
+  if (project.hasProperty('excludeIoTests')) {
+    tags {
+      exclude 'fileio.test'
+    }
+  }
+}
+
+testScoverage {
+  maxParallelForks = 1
+  if (project.hasProperty('excludeIoTests')) {
+    tags {
+      exclude 'fileio.test'
+    }
+  }
+}
+
+// target 1.7 JVM
+sourceCompatibility = 1.7
+targetCompatibility = 1.7
+
+// repositories for dependencies
+repositories {
+  mavenCentral()
+  mavenLocal()
+  maven {
+    url = "https://repository.cloudera.com/artifactory/cloudera-repos"
+  }
+  maven {
+    url = "${System.env.MAVEN_REPO_URL}/snapshots"
+  }
+  maven {
+    url = "${System.env.MAVEN_REPO_URL}/internal"
+  }
+}
+
+// publishing setup - url, username, password need to be stored in environment
+// variables
+publishing {
+  publications {
+    maven(MavenPublication) {
+      from components.java
+    }
+  }
+}
+publishing {
+  repositories {
+    maven {
+      if (version.endsWith("SNAPSHOT")) {
+        url "${System.env.MAVEN_REPO_URL}/snapshots"
+      } else {
+        url "${System.env.MAVEN_REPO_URL}/internal"
+      }
+      credentials {
+        username "${System.env.MAVEN_REPO_USERNAME}"
+        password "${System.env.MAVEN_REPO_PASSWORD}"
+      }
+    }
+  }
+}
+
+// Jars this project depends on
+dependencies {
+  // Compile config - needed to build and required at runtime
+  compile "software.uncharted.sparkpipe:sparkpipe-core:1.1.0-SNAPSHOT"
+  compile "org.clapper:grizzled-slf4j_$dependencyScalaVersion:1.0.2"
+  compile 'log4j:apache-log4j-extras:1.2.17'
+  compile "joda-time:joda-time:2.9.4"
+  compile "org.joda:joda-convert:1.8.1"
+
+  // Provided config - needed to compile, expected to be available when deployed
+  provided "org.apache.spark:spark-core_$dependencyScalaVersion:$sparkVersion"
+  provided "org.apache.spark:spark-mllib_$dependencyScalaVersion:$sparkVersion"
+  provided "org.apache.spark:spark-sql_$dependencyScalaVersion:$sparkVersion"
+
+  // Test related
+  testCompile "org.scalatest:scalatest_$dependencyScalaVersion:3.0.1"
+  testCompile "org.scalatest:scalatest_$dependencyScalaVersion:3.0.1"
+  testRuntime 'org.pegdown:pegdown:1.1.0'
+  scoverage "org.scoverage:scalac-scoverage-plugin_$dependencyScalaVersion:1.1.0",
+    "org.scoverage:scalac-scoverage-runtime_$dependencyScalaVersion:1.1.0"
+}
