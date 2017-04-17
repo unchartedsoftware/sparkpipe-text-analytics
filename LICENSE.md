@@ -4,7 +4,7 @@ Property of Uncharted™, formerly Oculus Info Inc.
 
 http://uncharted.software/
 
-Release under the MIT License.
+Released under the MIT License.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
