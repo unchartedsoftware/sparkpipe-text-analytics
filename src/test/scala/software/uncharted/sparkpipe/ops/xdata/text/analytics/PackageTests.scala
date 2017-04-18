@@ -28,8 +28,7 @@
 
 package software.uncharted.sparkpipe.ops.xdata.text.analytics
 
-import org.apache.spark.ml.linalg.SparseVector
-import org.apache.spark.mllib.feature.{HashingTF => TestTF}
+import java.text.DecimalFormat
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 import software.uncharted.sparkpipe.ops.core.rdd
@@ -154,32 +153,49 @@ class LDAOperationTests extends SparkFunSpec {
       ))
 
       val dfData = sparkSession.createDataFrame(rddData)
-
-      val result = tfidf("text", "tfs", "tfidfs")(dfData)
-
+      val result = tfidf("id", "text")(dfData)
       assert(result.count() === 5)
 
+      val scoresMap = result.select("scores").collect().map{row => row(0).asInstanceOf[Map[String, Row]]}
+      val returnScore = returnTFIDF(scoresMap)(_,_)
+
       //Verify the relative tfidf values for a few pairs.
-      //Extract the term + tfidf values.
-      val resultMap = result.select("tfidfs").collect().map(x => x(0).asInstanceOf[SparseVector])
+      assert(returnScore(0, "test") < returnScore(0, "this"))
+      assert(returnScore(0, "this") < returnScore(0, "a"))
 
-      //Use the hashing TF to get the index in the sparse vectors returned.
-      val testTF = new TestTF(resultMap(0).size)
+      assert(returnScore(1, "testing") < returnScore(1, "more"))
+      assert(returnScore(1, "testing") < returnScore(1, "done"))
 
-      assert(resultMap(0)(testTF.indexOf("test")) < resultMap(0)(testTF.indexOf("this")))
-      assert(resultMap(0)(testTF.indexOf("this")) < resultMap(0)(testTF.indexOf("a")))
+      assert(returnScore(3, "wish") < returnScore(3, "i"))
+      assert(returnScore(3, "it") < returnScore(3, "wish"))
 
-      assert(resultMap(1)(testTF.indexOf("testing")) < resultMap(1)(testTF.indexOf("more")))
-      assert(resultMap(1)(testTF.indexOf("testing")) < resultMap(1)(testTF.indexOf("done")))
+      assert(returnScore(4, "it") < returnScore(4, "final"))
+      assert(returnScore(4, "i") < returnScore(3, "i"))
+    }
 
-      assert(resultMap(3)(testTF.indexOf("wish")) < resultMap(3)(testTF.indexOf("i")))
-      assert(resultMap(3)(testTF.indexOf("it")) < resultMap(3)(testTF.indexOf("wish")))
+    it("should check the exact tfidf score") {
+      val testRDD = sc.parallelize(Seq(
+        TFIDFData(1, "Cats are the best pets".split(" ")),
+        TFIDFData(2, "Happy national pets day".split(" ")),
+        TFIDFData(3, "Cats are fluffy".split(" "))
+      ))
+      val testCorpus = sparkSession.createDataFrame(testRDD)
+      val result = tfidf("id", "text")(testCorpus)
 
-      assert(resultMap(4)(testTF.indexOf("it")) < resultMap(4)(testTF.indexOf("final")))
+      assert(result.count() === 3)
 
-      assert(resultMap(4)(testTF.indexOf("i")) < resultMap(3)(testTF.indexOf("i")))
+      val scoresMap = result.select("scores").collect().map{row => row(0).asInstanceOf[Map[String, Row]]}
+      val returnScore = returnTFIDF(scoresMap)(_,_)
+
+      val df = new DecimalFormat("#.####")
+      //df.format will round the number
+      assert(df.format(returnScore(0, "Cats")).toDouble == 0.2877)
+      assert(df.format(returnScore(0, "best")).toDouble == 0.6931)
+      assert(df.format(returnScore(2, "fluffy")).toDouble == 0.6931)
     }
   }
+
+  def returnTFIDF(scoresMap: Array[Map[String, Row]])(rowIndex: Int, word: String) : Double =  scoresMap(rowIndex).get(word).get.getDouble(1)
 }
 
 
