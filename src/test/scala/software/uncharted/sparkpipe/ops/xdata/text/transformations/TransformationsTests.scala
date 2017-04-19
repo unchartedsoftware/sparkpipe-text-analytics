@@ -43,14 +43,16 @@ class TransformationsTests extends SparkFunSpec {
   )
   private val idCol = "id"
   private val wordCol = "word"
+  private val goWordsPath = "/go_words.txt"
+  private val stopWordsPath = "/stopwords/stopwords_all_en_clean.txt"
 
   describe("#wordBags") {
 
     it("should convert dataframeToWordBags") {
       val wordBagConfig = DictionaryConfig(
         false,
-        Some("src/test/resources/goWords.txt"),
-        Some("src/test/resources/stopwords_all_en.v2.txt"),
+        Some(goWordsPath),
+        Some(stopWordsPath),
         None, None, None)
 
       val inputData = sc.parallelize(data)
@@ -73,8 +75,8 @@ class TransformationsTests extends SparkFunSpec {
 
       val config = DictionaryConfig(
         false,
-        Some("src/test/resources/goWords.txt"),
-        Some("src/test/resources/stopwords_all_en.v2.txt"),
+        Some(goWordsPath),
+        Some(stopWordsPath),
         None, None, None)
 
       val result = textToWordBags[Row, (Int, Map[String, Int])](
@@ -91,8 +93,8 @@ class TransformationsTests extends SparkFunSpec {
     it("should convert rddToWordBags") {
       val wordBagConfig = DictionaryConfig(
         true,
-        Some("src/test/resources/goWords.txt"),
-        Some("src/test/resources/stopwords_all_en.v2.txt"),
+        Some(goWordsPath),
+        Some(stopWordsPath),
         None, None, None)
 
       val rddData = sc.parallelize(data)
