@@ -136,7 +136,7 @@ publishing {
 // Jars this project depends on
 dependencies {
   // Compile config - needed to build and required at runtime
-  compile "software.uncharted.sparkpipe:sparkpipe-core:1.1.0-SNAPSHOT"
+  compile "software.uncharted.sparkpipe:sparkpipe-core:1.1.0"
   compile "org.clapper:grizzled-slf4j_$dependencyScalaVersion:1.0.2"
   compile "joda-time:joda-time:2.9.4"
   compile "org.joda:joda-convert:1.8.1"
