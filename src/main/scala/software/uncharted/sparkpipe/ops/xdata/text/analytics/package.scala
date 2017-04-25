@@ -31,9 +31,12 @@ package software.uncharted.sparkpipe.ops.xdata.text
 
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.feature.{HashingTF, IDF}
+import org.apache.spark.ml.linalg.{SparseVector => sv}
+import org.apache.spark.mllib.feature.{HashingTF => hashTF}
 import org.apache.spark.mllib.clustering.{DistributedLDAModel, LDA, LDAModel, LocalLDAModel}
 import org.apache.spark.mllib.linalg.{DenseVector, Matrix, SparseVector, Vector}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.{Column, DataFrame, Row}
 
 package object analytics {
@@ -42,22 +45,48 @@ package object analytics {
   case class DocumentTopics (ldaDocumentIndex: Long, topics: Seq[TopicScore])
 
   /**
-    * Calculate the TFIDF of the input column and store the TF & TFIDF results in the output columns.
+    * Calculates the TFIDF of the input column
+    * This implementation of tf(term frequency) uses the hashing trick and is the raw count variant.
+    * This implementation of idf(inverse document frequency) is represented by ln((d + 1)/(df + 1))
+    * Where d represents total number of documents and df represents the document frequency
+    * See http://spark.apache.org/docs/latest/ml-features.html#tf-idf
     *
-    * @param inputColumnName        Name of the input column. It should be a Seq[String].
-    * @param outputColumnNameTF     Name of the output column that will contain the term frequencies.
-    * @param outputColumnNameTFIDF  Name of the output column that will contain the TFIDF values.
-    * @param input                  Input DataFrame
-    * @return DataFrame with the calculated TFIDF values.
+    * @param idColName    Name of the index column. Data type should be Int.
+    * @param inputColName Name of the input column. Data type should be Seq[String].
+    * @param input        Input DataFrame
+    * @return             DataFrame where the column "scores" has format Map(term -> (tf, tfidf))
     */
-  def tfidf(inputColumnName: String, outputColumnNameTF: String, outputColumnNameTFIDF: String)(input: DataFrame): DataFrame = {
+  def tfidf(idColName: String, inputColName: String)(input: DataFrame): DataFrame = {
+    val tfColName = "tf"
+    val tfidfColName = "tfidf"
 
-    //Get the TF. MLLib needs an RDD of iterable.
-    val hashingTF = new HashingTF().setInputCol(inputColumnName).setOutputCol(outputColumnNameTF)
+    //create spark.ml version of TF function
+    val hashingTF = new HashingTF().setInputCol(inputColName).setOutputCol(tfColName)
     val featurizedData = hashingTF.transform(input)
-    val idf = new IDF().setInputCol(outputColumnNameTF).setOutputCol(outputColumnNameTFIDF)
+    val idf = new IDF().setInputCol(tfColName).setOutputCol(tfidfColName)
     val idfModel = idf.fit(featurizedData)
-    idfModel.transform(featurizedData)
+    val result = idfModel.transform(featurizedData)
+
+    val tfMap = result.select(tfColName).collect().map(row => row(0).asInstanceOf[sv])
+    val tfidfMap = result.select(tfidfColName).collect().map(row => row(0).asInstanceOf[sv])
+
+    //create spark.mllib version of TF function
+    val getIndexTF =  new hashTF(tfMap(0).size)
+    val getIndexTFIDF = new hashTF(tfidfMap(0).size)
+
+    val scoreColFunc = udf(
+      (rowIndex: Int, wordSeq: Seq[String]) =>
+        wordSeq.map { word =>
+          val tfScore = tfMap(rowIndex - 1)(getIndexTF.indexOf(word))
+          val tfidfScore = tfidfMap(rowIndex - 1)(getIndexTFIDF.indexOf(word))
+          (word -> (tfScore, tfidfScore))
+        }.toMap
+    )
+
+    val indexColumn = new Column(idColName)
+    val textColumn = new Column(inputColName)
+
+    result.withColumn("scores", scoreColFunc(indexColumn, textColumn)).drop(inputColName, tfColName, tfidfColName)
   }
 
     val tmpDir: String = "/tmp"
