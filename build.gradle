@@ -32,13 +32,12 @@ apply plugin: 'maven'
 apply plugin: 'maven-publish'
 apply plugin: 'idea'
 apply plugin: 'scalaStyle'
-apply plugin: 'scoverage'
+//apply plugin: 'scoverage'
 apply plugin: 'com.github.maiflai.scalatest'
 
 // run scala style and code coverage checks as part of the check phase
 check.dependsOn "scalaStyle"
 //check.dependsOn "checkScoverage"
-
 
 // task to update the gradle wrapper
 task wrapper(type: Wrapper) {
@@ -49,9 +48,49 @@ task wrapper(type: Wrapper) {
 configurations {
   provided
   compile.extendsFrom provided
-  // IntelliJ is picking up an old version of jetty that we need to
-  // force exclude to run tests.
-  provided.exclude group: "org.jboss.netty", module: "netty"
+}
+
+// generate lib jar
+jar {
+    version =  version
+    dependsOn configurations.runtime
+    from {
+        (configurations.runtime - configurations.provided).collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+    } {
+        exclude "META-INF/*.SF"
+        exclude "META-INF/*.DSA"
+        exclude "META-INF/*.RSA"
+    }
+}
+
+// generate javadocs
+task docs(type: ScalaDoc) {
+    source = sourceSets.main.allScala
+}
+
+// creates a jar containing the scaladoc output
+task docsJar(type: Jar, dependsOn: docs) {
+    classifier = 'javadoc'
+    from docs.destinationDir
+}
+docsJar.dependsOn docs
+
+// creates a jar containing the source code
+task sourcesJar(type: Jar) {
+    classifier = 'sources'
+    from sourceSets.main.allSource
+}
+
+// creates a jar containing the test source code
+task testJar(type: Jar) {
+    classifier = 'tests'
+    from sourceSets.test.output
+}
+
+artifacts {
+    archives docsJar, testJar, sourcesJar
 }
 
 // configure the idea plugin
@@ -84,9 +123,9 @@ test {
   maxParallelForks = 1
 }
 
-testScoverage {
-  maxParallelForks = 1
-}
+//testScoverage {
+//  maxParallelForks = 1
+//}
 
 // target 1.7 JVM
 sourceCompatibility = 1.7
@@ -100,11 +139,13 @@ repositories {
   maven {
     url = "https://repository.cloudera.com/artifactory/cloudera-repos"
   }
-  maven {
-    url = "${System.env.MAVEN_REPO_URL}/snapshots"
-  }
-  maven {
-    url = "${System.env.MAVEN_REPO_URL}/internal"
+  if (System.env.MAVEN_REPO_URL) {
+    maven {
+      url = "${System.env.MAVEN_REPO_URL}/snapshots"
+    }
+    maven {
+      url = "${System.env.MAVEN_REPO_URL}/internal"
+    }
   }
 }
 
@@ -114,12 +155,25 @@ publishing {
   publications {
     maven(MavenPublication) {
       from components.java
+      artifact docsJar
+      artifact sourcesJar
+      artifact testJar
     }
   }
 }
 publishing {
   repositories {
     maven {
+      if (System.env.MAVEN_REPO_URL == null) {
+        throw new GradleException("Can't publish - missing MAVEN_REPO_URL environment variable")
+      }
+      if (System.env.MAVEN_REPO_USERNAME == null) {
+          throw new GradleException("Can't publish - missing MAVEN_REPO_USERNAME environment variable")
+      }
+      if (System.env.MAVEN_REPO_PASSWORD == null) {
+          throw new GradleException("Can't publish - missing MAVEN_REPO_PASSWORD environment variable")
+      }
+
       if (version.endsWith("SNAPSHOT")) {
         url "${System.env.MAVEN_REPO_URL}/snapshots"
       } else {
@@ -150,6 +204,6 @@ dependencies {
   testCompile "org.scalatest:scalatest_$dependencyScalaVersion:3.0.1"
   testCompile "org.scalatest:scalatest_$dependencyScalaVersion:3.0.1"
   testRuntime 'org.pegdown:pegdown:1.1.0'
-  scoverage "org.scoverage:scalac-scoverage-plugin_$dependencyScalaVersion:1.1.0",
-    "org.scoverage:scalac-scoverage-runtime_$dependencyScalaVersion:1.1.0"
+//  scoverage "org.scoverage:scalac-scoverage-plugin_$dependencyScalaVersion:1.1.0",
+//    "org.scoverage:scalac-scoverage-runtime_$dependencyScalaVersion:1.1.0"
 }
