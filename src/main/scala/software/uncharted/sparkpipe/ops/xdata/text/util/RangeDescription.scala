@@ -31,12 +31,61 @@ import spire.implicits._ // scalastyle:ignore
 import spire.math.Numeric
 
 object RangeDescription {
+  /**
+    * Creates a description of a numeric range with an inferred max value.
+    *
+    * @param min min value of the range
+    * @param step range increment
+    * @param count number of increments
+    * @tparam T numeric type associated with the range
+    * @return the range description
+    */
   def fromMin[T : Numeric](min: T, step: T, count: Int): RangeDescription[T] = RangeDescription(min, min + step*count, count, step)
+
+  /**
+    * Creates a description of a numeric range with an inferred min value.
+    *
+    * @param max max value of the range
+    * @param step range increment
+    * @param count number of increments
+    * @tparam T numeric type associated with the range
+    * @return the range description
+    */
   def fromMax[T : Numeric](max: T, step: T, count: Int): RangeDescription[T] = RangeDescription(max - (step*count), max, count, step)
+
+  /**
+    * Creates a description of a numeric range with an inferred step value.
+    *
+    * @param min min value of the range
+    * @param max max value of the range
+    * @param count number of increments
+    * @tparam T numeric type associated with the range
+    * @return the range description
+    */
   def fromCount[T : Numeric](min: T, max: T, count: Int): RangeDescription[T] = RangeDescription(min, max, count, (max - min) / count)
+
+  /**
+    * Creates a description of a numeric range with an inferred count value.
+    *
+    * @param min min value of the range
+    * @param max max value of the range
+    * @param step range increment
+    * @tparam T numeric type associated with the range
+    * @return the range description
+    */
   def fromStep[T : Numeric](min: T, max: T, step: T): RangeDescription[T] = RangeDescription(min, max, ((max - min) / step).toInt(), step)
 }
 
+/**
+  * A description of a numeric range.  Does not implement the range itself.
+  *
+  * @param min min value of the range
+  * @param max max value of the range
+  * @param count number of increments
+  * @param step range increment  * @tparam T
+  * @tparam T numeric type associated with the range
+  * @return the range description
+  */
 case class RangeDescription[T: Numeric](min: T, max: T, count: Int, step: T) {
   require(min < max, s"min ($min) must be less than max ($max)")
   require(count >= 1, s"count ($count) must be greater than 1")

@@ -33,6 +33,8 @@ import org.apache.spark.mllib.linalg.{DenseMatrix, DenseVector, Matrix, SparseMa
 
 /**
   * Some general utilities for use with MLLib matrices
+  *
+  * @author nkronenfeld
   */
 object MatrixUtilities {
   /**

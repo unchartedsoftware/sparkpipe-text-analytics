@@ -28,37 +28,12 @@
 
 package software.uncharted.sparkpipe.ops.xdata.text.analytics
 
-/*
- * Possible Additions
- *   vocabulary: Array[String]   use only words in this to compute TF/IDF
- *   stopword: Array[String]     ignore words in this
- *   max_df: Int                 ignore words above this threshold (automatically detect and filter stopwords)
- *   min_df: Int                 ignore words below this threshold
- *   max_features: Int           build a vocabulary using only the top max_features words
- *   lowercase: Boolean          optionally lowercase all words
- *
- *
- * Normalization:
- *   Sometimes a normalization factor is used to correct discrepencies in document lengths.
- *   Document vectors are normalized so that documents are retrieved independent of their lengths.
- *   If this is not done and lengths vary considerably, very short documents may not be recognized as being relevant.
- *   Cosine Normalization:
- *     1 / math.sqrt( math.pow(w1, 2) + math.pow(w2, 2) +...+ math.pow(wn, 2) )
- *
- *     where w is the weight of term i
- *
- *
- * TFIDF calculation
- *   should there be a TFIDFCalculator object to compute:  tf * idf
- *
- *
- * IDF
- *   maybe refactor to use two flags:
- *   smooth_idf: Boolean     whether or not to add +1 smoothing
- *   log_idf: Boolean        whether or not to apply log(IDF)
- */
-
-
+/**
+  * Provides functions for evaluating term frequency (TF) and invers document frequency (IDF) in
+  * a number of standard ways.
+  *
+  * @author nkronenfeld
+  */
 
 sealed trait TFType extends Serializable {
   /** Calculate the term frequency of a given term in a given document.
@@ -73,7 +48,7 @@ sealed trait TFType extends Serializable {
 }
 
 /**
-  * Binary term frequency - 1 if term is present in the current document, 0 if it is absent
+  * Binary term frequency - 1 if term is present in the current document, 0 if it is absent.
   */
 object BinaryTF extends TFType {
   override def termFrequency(rawF: Int, nTerms: Int, maxRawF: Int): Double = {

@@ -39,7 +39,9 @@ import scala.collection.mutable.{Map => MutableMap}
 import scala.reflect.ClassTag
 
 /**
-  * Various generic text operations, not specific to a single textual analytic
+  * Various generic text operations, not specific to a single textual analytic.
+  *
+  * @author nkronenfeld
   */
 package object transformations {
 

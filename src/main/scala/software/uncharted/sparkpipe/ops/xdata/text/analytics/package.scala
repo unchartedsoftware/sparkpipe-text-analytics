@@ -41,16 +41,21 @@ import software.uncharted.sparkpipe.ops.core.dataframe
 import scala.collection.mutable
 import scala.math.Ordering
 
-
+/**
+  * TFIDF and LDA text analysis operations.
+  *
+  * @author nkronenfeld, cbethune
+  */
 package object analytics {
-  case class WordScore (word: String, score: Double)
-  case class TopicScore (topic: Seq[WordScore], score: Double)
-  case class DocumentTopics (ldaDocumentIndex: Long, topics: Seq[TopicScore])
 
-  case class TFIDFInfo(id: Long, scores: Seq[(String, Double)])
-  case class TermInfo(id: Long, words: Set[String], termFrequencies: mutable.Map[String, Int], maxFrequency: Int)
+  private[analytics] case class WordScore (word: String, score: Double)
+  private[analytics] case class TopicScore (topic: Seq[WordScore], score: Double)
+  private[analytics] case class DocumentTopics (ldaDocumentIndex: Long, topics: Seq[TopicScore])
 
-  val tmpDir: String = "/tmp"
+  private[analytics] case class TFIDFInfo(id: Long, scores: Seq[(String, Double)])
+  private[analytics] case class TermInfo(id: Long, words: Set[String], termFrequencies: mutable.Map[String, Int], maxFrequency: Int)
+
+  private val tmpDir: String = "/tmp"
 
   /**
     * Perform TDFIF analysis on a column of text documents in a dataframe.
@@ -85,7 +90,7 @@ package object analytics {
   }
 
   /**
-    * Perform TDFIF analysis on a column of word bags in a dataframe.
+    * Perform TFIDF analysis on a column of word bags in a dataframe.
     *
     * @param textCol The name of the column containing the text word bags to analyze
     * @param tfidfCol The name of the column to store the results in
