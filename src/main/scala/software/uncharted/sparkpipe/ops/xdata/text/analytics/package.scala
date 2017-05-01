@@ -246,6 +246,38 @@ package object analytics {
   }
 
   /**
+    * Perform LDA on a dataset of indexed documents in an RDD.  Callers must supply functions to extract
+    * the documents and their IDs from the input RDD.
+    *
+    * @param dictionaryConfig The dictionary creation configuration
+    * @param ldaConfig LDA job configuration
+    * @param docExtractor A function to extract the document to be analyzed from each input record
+    * @param idExtractor A function to extract the document index from each input record.  Each record should have a
+    *                    unique document index.
+    * @param input An RDD containing the data to analyze
+    * @tparam T The input data type
+    * @return An RDD of (ID, scored topics) tuples
+    */
+  def textLDATopics[T] (dictionaryConfig: DictionaryConfig, ldaConfig:LDAConfig, docExtractor: T => String, idExtractor: T => Long)
+                       (input: RDD[T]): RDD[(Long, Seq[TopicScore])] = {
+    val indexedDocuments = input.map(t => (idExtractor(t), docExtractor(t)))
+
+    // Mutate our input into indexed word bags
+    val inputWords = transformations.textToWordBags[(Long, String), (Long, Map[String, Int])](
+      dictionaryConfig,
+      _._2,
+      (original, wordBag) => (original._1, wordBag)
+    )(indexedDocuments)
+
+    // Create our dictionary from the set of input words
+    val dictionary = transformations.getDictionary[(Long, Map[String, Int])](dictionaryConfig, _._2)(inputWords)
+      .zipWithIndex.map { case ((word, count), index) => (word, index)}.toMap
+
+    // Perform our LDA analysis
+    wordBagLDATopics(ldaConfig, dictionary, inputWords)
+  }
+
+  /**
     * Perform LDA on an a set of word bags in an RDD.  Callers must supply a function to
     * extract the word bags from the RDD for processing.
     *
@@ -271,7 +303,17 @@ package object analytics {
     }
   }
 
-  private def wordBagLDATopics (config: LDAConfig, dictionary: Map[String, Int], input: RDD[(Long, Map[String, Int])]): RDD[(Long, Seq[TopicScore])] = {
+  /**
+    * Perform LDA on a dataset of indexed word bags in an RDD.
+    *
+    * @param config LDA job configuration
+    * @param dictionary A dictionary of words to consider in our documents
+    * @param input An RDD of indexed word bags; the Long id field should be unique for each row.
+    * @return An RDD of the same word bags, with a sequence of topics attached.  The third, attached, entry in each
+    *         row should be read as Seq[(topic, topicScoreForDocument)], where the topic is
+    *         Seq[(word, wordScoreForTopic)]
+    */
+  def wordBagLDATopics (config: LDAConfig, dictionary: Map[String, Int], input: RDD[(Long, Map[String, Int])]): RDD[(Long, Seq[TopicScore])] = {
     val documents = transformations.wordBagToWordVector(dictionary)(input)
     lda(config, dictionary, documents)
   }
