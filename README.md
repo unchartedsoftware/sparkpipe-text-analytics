@@ -1,4 +1,4 @@
-#Text Analysis Operations for the Uncharted Spark Pipeline#
+# Text Analysis Operations for the Uncharted Spark Pipeline #
 
 `sparkpipe-xdata-text` provides text analysis and transformation operations developed in support of Uncharted's work on the DARPA XDATA program.  They can be used stand-alone, but are designed to run as part of a [sparkpipe](https://github.com/unchartedsoftware/sparkpipe-core) pipeline.
 
@@ -32,7 +32,7 @@ The above command requires that `MAVEN_REPO_URL`, `MAVEN_REPO_USERNAME` and `MAV
 
 ## Example ##
 
-Follow the steps below to loads a CSV with a text column into a `DataFrame` and run TF-IDF.
+The steps below use the Spark shell to load a CSV file with a document column into a `DataFrame` and runs the TF-IDF analytict to generate weights.
 
 From the command prompt:
 ```
