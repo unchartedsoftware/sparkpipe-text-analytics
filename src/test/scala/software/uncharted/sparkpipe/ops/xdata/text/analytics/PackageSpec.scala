@@ -28,17 +28,18 @@
 
 package software.uncharted.sparkpipe.ops.xdata.text.analytics
 
-import java.text.DecimalFormat
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.types.{DataTypes, StringType}
 import org.apache.spark.sql.{DataFrame, Row}
 import software.uncharted.sparkpipe.ops.core.rdd
 import software.uncharted.sparkpipe.ops.xdata.text.transformations
 import software.uncharted.sparkpipe.spark.SparkFunSpec
 
-case class TFIDFData (id: Integer, text: Seq[String])
+case class TFIDFWordBagData(text: Seq[String], otherField: Int = 0)
+case class TFIDFTextData(text: String, otherField: Int = 0)
 case class LDATestData (index: Long, text: String)
 
-class LDAOperationTests extends SparkFunSpec {
+class PackageSpec extends SparkFunSpec {
   val defaultDictionaryConfig = DictionaryConfig(caseSensitive = true, None, None, None, None, None)
 
   describe("Word determination") {
@@ -68,7 +69,7 @@ class LDAOperationTests extends SparkFunSpec {
         new LDATestData(index, text)
       }
       val data = rdd.toDF(sparkSession)(rddData)
-      val rawResults = textLDA("index", "text", defaultDictionaryConfig, LDAConfig(4, 2, 4, None, None, "", "", ""))(data)
+      val rawResults = textLDA("text", defaultDictionaryConfig, LDAConfig(4, 2, 4, None, None, "", "", ""))(data)
 
       // Make sure we get the right number of results
       val results = interpretResults(rawResults).collect
@@ -112,7 +113,7 @@ class LDAOperationTests extends SparkFunSpec {
       }
 
       val data = rdd.toDF(sparkSession)(rddData)
-      val rawResults = textLDA("index", "text", defaultDictionaryConfig, LDAConfig(2, 20, 2, None, None, "", "", ""))(data)
+      val rawResults = textLDA("text", defaultDictionaryConfig, LDAConfig(2, 20, 2, None, None, "", "", ""))(data)
 
 
       // Make sure we get the right number of results
@@ -142,60 +143,121 @@ class LDAOperationTests extends SparkFunSpec {
     }
   }
 
-  describe("#TFIDF") {
-    it("should output terms & their TF/IDF values") {
+  describe("#wordBagTFIDF") {
+    it("should add a column containing terms & their TF/IDF values to the input dataframe") {
       val rddData = sc.parallelize(Seq(
-        TFIDFData(1, "this is a test".split(" ")),
-        TFIDFData(2, "more testing done".split(" ")),
-        TFIDFData(3, "test it again sam".split(" ")),
-        TFIDFData(4, "i wish i were testing so that i could do it".split(" ")),
-        TFIDFData(5, "this is the final test i did it".split(" "))
+        TFIDFWordBagData("this is a test".split(" ")),
+        TFIDFWordBagData("more testing is done".split(" ")),
+        TFIDFWordBagData("test it again sam".split(" ")),
+        TFIDFWordBagData("i wish i were testing so that i could do it".split(" ")),
+        TFIDFWordBagData("this is the final test i did it".split(" "))
       ))
 
       val dfData = sparkSession.createDataFrame(rddData)
-      val result = tfidf("id", "text")(dfData)
+      val result = wordBagTFIDF("text", "tfidf")(dfData)
       assert(result.count() === 5)
 
-      val scoresMap = result.select("scores").collect().map{row => row(0).asInstanceOf[Map[String, Row]]}
-      val returnScore = returnTFIDF(scoresMap)(_,_)
+      val resultRows = result.select("tfidf").collect()
+      val resultMap = resultRows.map { row =>
+        row.getSeq[Row](0).map(r => (r.getString(0), r.getDouble(1))).toMap
+      }
 
-      //Verify the relative tfidf values for a few pairs.
-      assert(returnScore(0, "test") < returnScore(0, "this"))
-      assert(returnScore(0, "this") < returnScore(0, "a"))
+      //Extract the term + tfidf values as an array of (word, score) maps
+      assert(resultMap(0)("test") < resultMap(0)("this"))
+      assert(resultMap(0)("this") < resultMap(0)("a"))
 
-      assert(returnScore(1, "testing") < returnScore(1, "more"))
-      assert(returnScore(1, "testing") < returnScore(1, "done"))
+      assert(resultMap(1)("testing") < resultMap(1)("more"))
+      assert(resultMap(1)("testing") < resultMap(1)("done"))
 
-      assert(returnScore(3, "wish") < returnScore(3, "i"))
-      assert(returnScore(3, "it") < returnScore(3, "wish"))
+      assert(resultMap(3)("wish") < resultMap(3)("i"))
+      assert(resultMap(3)("it") < resultMap(3)("wish"))
 
-      assert(returnScore(4, "it") < returnScore(4, "final"))
-      assert(returnScore(4, "i") < returnScore(3, "i"))
+      assert(resultMap(4)("it") < resultMap(4)("final"))
+
+      assert(resultMap(4)("i") < resultMap(3)("i"))
+
+      assert(result.columns.toSet == Set("text", "tfidf", "otherField"))
+      assert(result.schema.fields.find(_.name == "text").get.dataType == DataTypes.createArrayType(StringType))
     }
 
-    it("should check the exact tfidf score") {
-      val testRDD = sc.parallelize(Seq(
-        TFIDFData(1, "Cats are the best pets".split(" ")),
-        TFIDFData(2, "Happy national pets day".split(" ")),
-        TFIDFData(3, "Cats are fluffy".split(" "))
+    it("should filter out words based on minTF and minDF count") {
+      val rddData = sc.parallelize(Seq(
+        TFIDFWordBagData("a b c c c c f f".split(" ")),
+        TFIDFWordBagData("a b d d d d d c f f".split(" "))
       ))
-      val testCorpus = sparkSession.createDataFrame(testRDD)
-      val result = tfidf("id", "text")(testCorpus)
 
-      assert(result.count() === 3)
+      val dfData = sparkSession.createDataFrame(rddData)
+      val result = wordBagTFIDF("text", "tfidf", minTF = 2, minDF = 5)(dfData)
+      val resultMap = convertToMap(result)
 
-      val scoresMap = result.select("scores").collect().map{row => row(0).asInstanceOf[Map[String, Row]]}
-      val returnScore = returnTFIDF(scoresMap)(_,_)
+      //Extract the term + tfidf values as an array of (word, score) maps
+      assert(!resultMap(0).contains("a"))
+      assert(!resultMap(0).contains("b"))
+      assert(resultMap(0).contains("c"))
+      assert(!resultMap(0).contains("f"))
 
-      val df = new DecimalFormat("#.####")
-      //df.format will round the number
-      assert(df.format(returnScore(0, "Cats")).toDouble == 0.2877)
-      assert(df.format(returnScore(0, "best")).toDouble == 0.6931)
-      assert(df.format(returnScore(2, "fluffy")).toDouble == 0.6931)
+      assert(!resultMap(1).contains("a"))
+      assert(!resultMap(1).contains("b"))
+      assert(!resultMap(1).contains("c"))
+      assert(resultMap(1).contains("d"))
+      assert(!resultMap(1).contains("f"))
+    }
+
+    it("should retain the requested number of terms using the score as the sorting criteria") {
+      val rddData = sc.parallelize(Seq(
+        TFIDFWordBagData("a b c c c c f f".split(" ")),
+        TFIDFWordBagData("a b d d d d d c f f".split(" "))
+      ))
+
+      val dfData = sparkSession.createDataFrame(rddData)
+      val result = wordBagTFIDF("text", "tfidf", retainedTerms = Some(3))(dfData)
+      val resultMap = convertToMap(result)
+
+      //Extract the term + tfidf values as an array of (word, score) maps
+      assert(resultMap(0).contains("a"))
+      assert(resultMap(0).contains("b"))
+      assert(resultMap(0).contains("f"))
+
+      assert(resultMap(1).contains("a"))
+      assert(resultMap(1).contains("b"))
+      assert(resultMap(1).contains("f"))
     }
   }
 
-  def returnTFIDF(scoresMap: Array[Map[String, Row]])(rowIndex: Int, word: String) : Double =  scoresMap(rowIndex).get(word).get.getDouble(1)
+  describe("#textTFIDF") {
+    it("should split text prior to running analytic and add result column to input dataframe") {
+
+      val rddData = sc.parallelize(Seq(
+        TFIDFTextData("a b c c c c f f"),
+        TFIDFTextData("a b d d d d d c f f")
+      ))
+
+      val dfData = sparkSession.createDataFrame(rddData)
+      val result = textTFIDF("text", "tfidf")(dfData)
+      result.show()
+      val resultMap = convertToMap(result)
+
+      //Extract the term + tfidf values as an array of (word, score) maps
+      assert(resultMap(0).contains("a"))
+      assert(resultMap(0).contains("b"))
+      assert(resultMap(0).contains("f"))
+
+      assert(resultMap(1).contains("a"))
+      assert(resultMap(1).contains("b"))
+      assert(resultMap(1).contains("f"))
+
+      assert(result.columns.toSet == Set("text", "tfidf", "otherField"))
+      assert(result.schema.fields.find(_.name == "text").get.dataType == DataTypes.StringType)
+    }
+  }
+
+  def convertToMap(result: DataFrame): Array[Map[String, Double]] = {
+    val resultRows = result.select("tfidf").collect()
+    val resultMap = resultRows.map { row =>
+      row.getSeq[Row](0).map(r => (r.getString(0), r.getDouble(1))).toMap
+    }
+    resultMap
+  }
 }
 
 

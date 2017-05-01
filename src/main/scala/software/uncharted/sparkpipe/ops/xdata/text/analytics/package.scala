@@ -26,91 +26,168 @@
  * SOFTWARE.
  */
 
-
 package software.uncharted.sparkpipe.ops.xdata.text
 
 import org.apache.spark.SparkContext
-import org.apache.spark.ml.feature.{HashingTF, IDF}
-import org.apache.spark.ml.linalg.{SparseVector => sv}
-import org.apache.spark.mllib.feature.{HashingTF => hashTF}
 import org.apache.spark.mllib.clustering.{DistributedLDAModel, LDA, LDAModel, LocalLDAModel}
 import org.apache.spark.mllib.linalg.{DenseVector, Matrix, SparseVector, Vector}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.functions.udf
-import org.apache.spark.sql.{Column, DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.functions
+import software.uncharted.sparkpipe.Pipe
+import software.uncharted.sparkpipe.ops.core.dataframe.text
+import software.uncharted.sparkpipe.ops.core.dataframe
+
+import scala.collection.mutable
+import scala.math.Ordering
+
 
 package object analytics {
   case class WordScore (word: String, score: Double)
   case class TopicScore (topic: Seq[WordScore], score: Double)
   case class DocumentTopics (ldaDocumentIndex: Long, topics: Seq[TopicScore])
 
+  case class TFIDFInfo(id: Long, scores: Seq[(String, Double)])
+  case class TermInfo(id: Long, words: Set[String], termFrequencies: mutable.Map[String, Int], maxFrequency: Int)
+
+  val tmpDir: String = "/tmp"
+
   /**
-    * Calculates the TFIDF of the input column
-    * This implementation of tf(term frequency) uses the hashing trick and is the raw count variant.
-    * This implementation of idf(inverse document frequency) is represented by ln((d + 1)/(df + 1))
-    * Where d represents total number of documents and df represents the document frequency
-    * See http://spark.apache.org/docs/latest/ml-features.html#tf-idf
+    * Perform TDFIF analysis on a column of text documents in a dataframe.
     *
-    * @param idColName    Name of the index column. Data type should be Int.
-    * @param inputColName Name of the input column. Data type should be Seq[String].
-    * @param input        Input DataFrame
-    * @return             DataFrame where the column "scores" has format Map(term -> (tf, tfidf))
+    * @param textCol The name of the column containing the text to analyze
+    * @param tfidfCol The name of the column to store the results in
+    * @param tfType The term frequency computation type
+    * @param idfType The inverse document frequency computation type
+    * @param minTF The minimum number of times a word must occur in a document to be
+    *              included in that document's term frequency list
+    * @param minDF The minimum number of times a word must occur in the document corpus for
+    *              it to be included in the corpus frequency list
+    * @param retainedTerms The number of terms to keep based on computed TFIDF score
+    * @param input The dataframe containing the input to analyze
+    * @return The original dataframe augmented the computed TFIDF score.
     */
-  def tfidf(idColName: String, inputColName: String)(input: DataFrame): DataFrame = {
-    val tfColName = "tf"
-    val tfidfColName = "tfidf"
-
-    //create spark.ml version of TF function
-    val hashingTF = new HashingTF().setInputCol(inputColName).setOutputCol(tfColName)
-    val featurizedData = hashingTF.transform(input)
-    val idf = new IDF().setInputCol(tfColName).setOutputCol(tfidfColName)
-    val idfModel = idf.fit(featurizedData)
-    val result = idfModel.transform(featurizedData)
-
-    val tfMap = result.select(tfColName).collect().map(row => row(0).asInstanceOf[sv])
-    val tfidfMap = result.select(tfidfColName).collect().map(row => row(0).asInstanceOf[sv])
-
-    //create spark.mllib version of TF function
-    val getIndexTF =  new hashTF(tfMap(0).size)
-    val getIndexTFIDF = new hashTF(tfidfMap(0).size)
-
-    val scoreColFunc = udf(
-      (rowIndex: Int, wordSeq: Seq[String]) =>
-        wordSeq.map { word =>
-          val tfScore = tfMap(rowIndex - 1)(getIndexTF.indexOf(word))
-          val tfidfScore = tfidfMap(rowIndex - 1)(getIndexTFIDF.indexOf(word))
-          (word -> (tfScore, tfidfScore))
-        }.toMap
-    )
-
-    val indexColumn = new Column(idColName)
-    val textColumn = new Column(inputColName)
-
-    result.withColumn("scores", scoreColFunc(indexColumn, textColumn)).drop(inputColName, tfColName, tfidfColName)
+  def textTFIDF (textCol: String,
+                    tfidfCol: String,
+                    tfType: TFType = RawTF,
+                    idfType: IDFType = LogIDF,
+                    minTF: Int = 0,
+                    minDF: Int = 0,
+                    retainedTerms: Option[Int] = None)
+  (input: DataFrame): DataFrame = {
+    val splitTextCol = "__split_text__"
+    Pipe(input)
+      .to(dataframe.cache)
+      .to(dataframe.addColumn(splitTextCol, (s: String) => s.split(transformations.notWord), textCol))
+      .to(wordBagTFIDF(splitTextCol, tfidfCol, tfType, idfType, minTF, minDF, retainedTerms))
+      .to(_.drop(splitTextCol))
+      .run()
   }
 
-    val tmpDir: String = "/tmp"
+  /**
+    * Perform TDFIF analysis on a column of word bags in a dataframe.
+    *
+    * @param textCol The name of the column containing the text word bags to analyze
+    * @param tfidfCol The name of the column to store the results in
+    * @param tfType The term frequency computation type
+    * @param idfType The inverse document frequency computation type
+    * @param minTF The minimum number of times a word must occur in a document to be
+    *              included in that document's term frequency list
+    * @param minDF The minimum number of times a word must occur in the document corpus for
+    *              it to be included in the corpus frequency list
+    * @param retainedTerms The number of terms to keep based on computed TFIDF score
+    * @param input The dataframe containing the input to analyze
+    * @return The original dataframe augmented the computed TFIDF score
+    */
+  // scalastyle:off method.length
+  def wordBagTFIDF (textCol: String,
+                 tfidfCol: String,
+                 tfType: TFType = RawTF,
+                 idfType: IDFType = LogIDF,
+                 minTF: Int = 0,
+                 minDF: Int = 0,
+                 retainedTerms: Option[Int] = None)
+                (input: DataFrame): DataFrame = {
+
+    val idCol = "__id__"
+
+    // Filter down to the text column and add a unique row id to use for a final join
+    val idInput = Pipe(input)
+      .to(_.withColumn(idCol, functions.monotonically_increasing_id()))
+      .to(dataframe.cache)
+      .run
+
+    val textInput = Pipe(idInput).to(_.select(textCol, idCol)).run
+
+    // Compute word counts for the entire corpus, filter by called supplied min DF and broadcast it
+    val documentFrequencies = Pipe(textInput)
+      .to(text.uniqueTerms(textCol))
+      .to(_.retain((k, v) => v >= minDF)) // happening in driver - could be mem issue for large dict
+      .run
+    val broadcastDF = input.sparkSession.sparkContext.broadcast(documentFrequencies)
+
+    // compute the word frequencies for the terms in each row text field
+    val rdd = textInput.rdd
+    val termFrequencies = rdd.map { row =>
+      val termMap = mutable.Map[String, Int]() // using mutable because immutable in tight loops causes a lot of GC
+      val words = row.getSeq[String](0)
+      words.foreach { word =>
+        val lowerWord = word.toLowerCase
+        termMap(lowerWord) = termMap.getOrElse(lowerWord, 0) + 1
+      }
+      // filter out any that are below the minTF
+      termMap.retain((k, v) => v >= minTF)
+
+      // store values needed for subsequent TF computation
+      val maxFrequency = termMap.values.fold(0)((c, v) => Math.max(c, v))
+      TermInfo(row.getLong(1), words.toSet, termMap, maxFrequency)
+    }
+
+    // apply the caller supplied TF and IDF functions to the raw counts and combine for final scores
+    val tfidf = termFrequencies.map { termInfo =>
+      val tfidfMap = mutable.SortedSet[(String, Double)]()(Ordering[(Double, String)].on(t => (t._2, t._1)))
+
+      termInfo.words.foreach { word =>
+        // proceed with the calculation if words made it past min count filters
+        if (termInfo.termFrequencies.contains(word) && broadcastDF.value.contains(word)) {
+          val tf = tfType.termFrequency(termInfo.termFrequencies(word), termInfo.words.size, termInfo.maxFrequency)
+          val idf = idfType.inverseDocumentFrequency(broadcastDF.value.size, broadcastDF.value(word))
+          tfidfMap.add((word, tf * idf))
+        }
+      }
+
+      // Extract the requested number of retained terms
+      TFIDFInfo(termInfo.id, retainedTerms.map(tfidfMap.takeRight).getOrElse(tfidfMap).toSeq)
+    }
+
+    // Join the computed word scores to the original data by the ID and return
+    val resultDf = input.sparkSession.createDataFrame(tfidf).toDF(idCol, tfidfCol)
+    resultDf.join(idInput, idCol).drop(idCol)
+  }
+
 
   /**
-    * Perform LDA analysis on documents in a dataframe
+    * Perform LDA analysis on documents in a dataframe.
     *
-    * @param idCol The name of a column containing a (long) id unique to each row
     * @param textCol The name of the column containing the text to analyze
     * @param dictionaryConfig The dictionary creation configuration
     * @param ldaConfig LDA job configuration
     * @param input The dataframe containing the data to analyze
     * @return A dataframe containing the input data, augmented with the topics found in that input data
     */
-  def textLDA (idCol: String, textCol: String, dictionaryConfig: DictionaryConfig, ldaConfig: LDAConfig)
+  def textLDA (textCol: String, dictionaryConfig: DictionaryConfig, ldaConfig: LDAConfig)
               (input: DataFrame): DataFrame = {
+    val idCol = "__id__"
     val sqlc = input.sqlContext
+
+    val indexedInput = input.withColumn(idCol, functions.monotonically_increasing_id)
 
     // Mutate our input into indexed word bags
     val inputWords = transformations.textToWordBags[Row, (Long, Map[String, Int])](
       dictionaryConfig,
       _.getString(1),
       (row, wordBag) => (row.getLong(0), wordBag)
-    )(input.select(idCol, textCol).rdd)
+    )(indexedInput.select(idCol, textCol).rdd)
 
     // Create our dictionary from the set of input words
     val dictionary = transformations.getDictionary[(Long, Map[String, Int])](dictionaryConfig, _._2)(inputWords)
@@ -122,19 +199,22 @@ package object analytics {
     // Mutate to dataframe form for joining with original data
     val dfResults = sqlc.createDataFrame(rawResults.map{case (index, scores) => DocumentTopics(index, scores)})
 
-    // Join our LDA results back with our original data
-    input.join(dfResults, input(idCol) === dfResults("ldaDocumentIndex")).drop(new Column("ldaDocumentIndex"))
+    // Join our LDA results back with our original data and drop working columns
+    indexedInput.join(dfResults, indexedInput(idCol) === dfResults("ldaDocumentIndex"))
+      .drop("ldaDocumentIndex")
+      .drop(idCol)
   }
 
   /**
-    * Perform LDA on an arbitrary dataset of unindexed documents
+    * Perform LDA on a dataset of documents in an RDD.  Callers must supply a function to
+    * extract the documents from the RDD for processing.
     *
     * @param dictionaryConfig The dictionary creation configuration
     * @param ldaConfig LDA job configuration
     * @param docExtractor A function to extract the document to be analyzed from each input record
     * @param input An RDD containing the data to analyze
     * @tparam T The input data type
-    * @return A dataframe containing the input data, augmented with the topics found in that input data
+    * @return An RDD containing the input data, augmented with the topics found in that input data
     */
   def textLDA[T] (dictionaryConfig: DictionaryConfig, ldaConfig: LDAConfig, docExtractor: T => String)
                  (input: RDD[T]): RDD[(T, Seq[TopicScore])] = {
@@ -161,39 +241,17 @@ package object analytics {
   }
 
   /**
-    * Perform LDA on an arbitrary dataset of indexed documents.
+    * Perform LDA on an a set of word bags in an RDD.  Callers must supply a function to
+    * extract the word bags from the RDD for processing.
     *
-    * @param dictionaryConfig The dictionary creation configuration
+    * * @param dictionaryConfig The dictionary creation configuration
+    *
     * @param ldaConfig LDA job configuration
-    * @param docExtractor A function to extract the document to be analyzed from each input record
-    * @param idExtractor A function to extract the document index from each input record.  Each record should have a
-    *                    unique document index.
+    * @param wordBagExtractor A function to extract the word bags to be analyzed from each input record
     * @param input An RDD containing the data to analyze
     * @tparam T The input data type
-    * @return
-    */
-  def textLDATopics[T] (dictionaryConfig: DictionaryConfig, ldaConfig:LDAConfig, docExtractor: T => String, idExtractor: T => Long)
-                       (input: RDD[T]): RDD[(Long, Seq[TopicScore])] = {
-    val indexedDocuments = input.map(t => (idExtractor(t), docExtractor(t)))
-
-    // Mutate our input into indexed word bags
-    val inputWords = transformations.textToWordBags[(Long, String), (Long, Map[String, Int])](
-      dictionaryConfig,
-      _._2,
-      (original, wordBag) => (original._1, wordBag)
-    )(indexedDocuments)
-
-    // Create our dictionary from the set of input words
-    val dictionary = transformations.getDictionary[(Long, Map[String, Int])](dictionaryConfig, _._2)(inputWords)
-      .zipWithIndex.map { case ((word, count), index) => (word, index)}.toMap
-
-    // Perform our LDA analysis
-    wordBagLDATopics(ldaConfig, dictionary, inputWords)
-  }
-
-
-  /**
-    * Perform LDA on an arbitrary dataset of unindexed word bags
+    * @return An RDD containing the input data, augmented with the topics found in that input data
+    *
     */
   def wordBagLDA[T] (dictionaryConfig: DictionaryConfig, ldaConfig: LDAConfig, wordBagExtractor: T => Map[String, Int])
                     (input: RDD[T]): RDD[(T, Seq[TopicScore])] = {
@@ -208,17 +266,7 @@ package object analytics {
     }
   }
 
-  /**
-    * Perform LDA on an RDD of indexed documents.
-    *
-    * @param config LDA job configuration
-    * @param dictionary A dictionary of words to consider in our documents
-    * @param input An RDD of indexed word bags; the Long id field should be unique for each row.
-    * @return An RDD of the same word bags, with a sequence of topics attached.  The third, attached, entry in each
-    *         row should be read as Seq[(topic, topicScoreForDocument)], where the topic is
-    *         Seq[(word, wordScoreForTopic)]
-    */
-  def wordBagLDATopics (config: LDAConfig, dictionary: Map[String, Int], input: RDD[(Long, Map[String, Int])]): RDD[(Long, Seq[TopicScore])] = {
+  private def wordBagLDATopics (config: LDAConfig, dictionary: Map[String, Int], input: RDD[(Long, Map[String, Int])]): RDD[(Long, Seq[TopicScore])] = {
     val documents = transformations.wordBagToWordVector(dictionary)(input)
     lda(config, dictionary, documents)
   }
