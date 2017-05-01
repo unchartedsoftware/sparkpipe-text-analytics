@@ -1,6 +1,6 @@
 description = "Sparkpipe text processing and analytic operations developed for the XDATA project"
 group = "software.uncharted.sparkpipe"
-version = "0.1.0-SNAPSHOT"
+version = "0.1.0"
 
 // project level shared version variables
 ext {
