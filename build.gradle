@@ -164,16 +164,6 @@ publishing {
 publishing {
   repositories {
     maven {
-      if (System.env.MAVEN_REPO_URL == null) {
-        throw new GradleException("Can't publish - missing MAVEN_REPO_URL environment variable")
-      }
-      if (System.env.MAVEN_REPO_USERNAME == null) {
-          throw new GradleException("Can't publish - missing MAVEN_REPO_USERNAME environment variable")
-      }
-      if (System.env.MAVEN_REPO_PASSWORD == null) {
-          throw new GradleException("Can't publish - missing MAVEN_REPO_PASSWORD environment variable")
-      }
-
       if (version.endsWith("SNAPSHOT")) {
         url "${System.env.MAVEN_REPO_URL}/snapshots"
       } else {
@@ -185,6 +175,18 @@ publishing {
       }
     }
   }
+}
+
+publish << {
+    if (System.env.MAVEN_REPO_URL == null) {
+        throw new GradleException("Can't publish - missing MAVEN_REPO_URL environment variable")
+    }
+    if (System.env.MAVEN_REPO_USERNAME == null) {
+        throw new GradleException("Can't publish - missing MAVEN_REPO_USERNAME environment variable")
+    }
+    if (System.env.MAVEN_REPO_PASSWORD == null) {
+        throw new GradleException("Can't publish - missing MAVEN_REPO_PASSWORD environment variable")
+    }
 }
 
 // Jars this project depends on
