@@ -1,10 +1,8 @@
 language: java
 
-script: ./gradlew check -x publish
+global: JAVA_OPTS=-Xmx2g
 
-before_script:
-  - "echo $JAVA_OPTS"
-  - "export JAVA_OPTS=-Xmx1024m"
+script: ./gradlew check -x publish
 
 before_cache:
   - rm -f  $HOME/.gradle/caches/modules-2/modules-2.lock
