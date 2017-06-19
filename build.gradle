@@ -50,21 +50,6 @@ configurations {
   compile.extendsFrom provided
 }
 
-// generate lib jar
-jar {
-    version =  version
-    dependsOn configurations.runtime
-    from {
-        (configurations.runtime - configurations.provided).collect {
-            it.isDirectory() ? it : zipTree(it)
-        }
-    } {
-        exclude "META-INF/*.SF"
-        exclude "META-INF/*.DSA"
-        exclude "META-INF/*.RSA"
-    }
-}
-
 // generate javadocs
 task docs(type: ScalaDoc) {
     source = sourceSets.main.allScala
