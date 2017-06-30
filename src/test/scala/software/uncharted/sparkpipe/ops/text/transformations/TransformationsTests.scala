@@ -26,11 +26,11 @@
   * SOFTWARE.
   */
 
-package software.uncharted.sparkpipe.ops.xdata.text.transformations
+package software.uncharted.sparkpipe.ops.text.transformations
 
 import org.apache.spark.sql.Row
 import software.uncharted.sparkpipe.spark.SparkFunSpec
-import software.uncharted.sparkpipe.ops.xdata.text.analytics.DictionaryConfig
+import software.uncharted.sparkpipe.ops.text.analytics.DictionaryConfig
 
 case class Document(id: Int, word: String)
 

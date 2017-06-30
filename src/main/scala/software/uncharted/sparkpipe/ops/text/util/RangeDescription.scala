@@ -25,7 +25,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package software.uncharted.sparkpipe.ops.xdata.text.util
+package software.uncharted.sparkpipe.ops.text.util
 
 import spire.implicits._ // scalastyle:ignore
 import spire.math.Numeric

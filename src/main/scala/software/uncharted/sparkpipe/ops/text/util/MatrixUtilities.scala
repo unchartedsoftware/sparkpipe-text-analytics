@@ -26,7 +26,7 @@
  * SOFTWARE.
  */
 
-package software.uncharted.sparkpipe.ops.xdata.text.util
+package software.uncharted.sparkpipe.ops.text.util
 
 import org.apache.spark.mllib.linalg.{DenseMatrix, DenseVector, Matrix, SparseMatrix, SparseVector, Vector}
 

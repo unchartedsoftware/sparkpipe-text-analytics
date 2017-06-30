@@ -26,7 +26,7 @@
  * SOFTWARE.
  */
 
-package software.uncharted.sparkpipe.ops.xdata.text
+package software.uncharted.sparkpipe.ops.text
 
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.clustering.{DistributedLDAModel, LDA, LDAModel, LocalLDAModel}
