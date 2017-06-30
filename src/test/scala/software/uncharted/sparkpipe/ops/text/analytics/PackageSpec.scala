@@ -26,13 +26,13 @@
  * SOFTWARE.
  */
 
-package software.uncharted.sparkpipe.ops.xdata.text.analytics
+package software.uncharted.sparkpipe.ops.text.analytics
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.{DataTypes, StringType}
 import org.apache.spark.sql.{DataFrame, Row}
 import software.uncharted.sparkpipe.ops.core.rdd
-import software.uncharted.sparkpipe.ops.xdata.text.transformations
+import software.uncharted.sparkpipe.ops.text.transformations
 import software.uncharted.sparkpipe.spark.SparkFunSpec
 
 case class TFIDFWordBagData(text: Seq[String], otherField: Int = 0)

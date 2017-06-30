@@ -26,14 +26,14 @@
  * SOFTWARE.
  */
 
-package software.uncharted.sparkpipe.ops.xdata.text
+package software.uncharted.sparkpipe.ops.text
 
 import java.io.FileInputStream
 
 import org.apache.spark.mllib.linalg.{SparseVector, Vector}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
-import software.uncharted.sparkpipe.ops.xdata.text.analytics.DictionaryConfig
+import software.uncharted.sparkpipe.ops.text.analytics.DictionaryConfig
 
 import scala.collection.mutable.{Map => MutableMap}
 import scala.reflect.ClassTag

@@ -1,6 +1,6 @@
 # Text Analysis Operations for the Uncharted Spark Pipeline #
 
-`sparkpipe-xdata-text` provides text analysis and transformation operations developed in support of Uncharted's work on the DARPA XDATA program.  They can be used stand-alone, but are designed to run as part of a [sparkpipe](https://github.com/unchartedsoftware/sparkpipe-core) pipeline.
+`sparkpipe-text-analytics` provides text analysis and transformation operations developed in support of Uncharted's work on the DARPA XDATA program.  They can be used stand-alone, but are designed to run as part of a [sparkpipe](https://github.com/unchartedsoftware/sparkpipe-core) pipeline.
 
 ## Operations ##
 
@@ -38,16 +38,16 @@ From the command prompt:
 ```
 mkdir ~/text_example
 cd ~/text_example
-cp project_root/build/libs/sparkpipe-xdata-text-0.1.0.jar ~/text_example
+cp project_root/build/libs/sparkpipe-text-analytics-0.2.0.jar ~/text_example
 wget https://s3.ca-central-1.amazonaws.com/tiling-examples/patent_abstracts.zip
-${SPARK_HOME}/bin/spark-shell --packages software.uncharted.sparkpipe:sparkpipe-core:1.1.0 --jars ~/text-example/sparkpipe-xdata-text-0.1.0.jar
+${SPARK_HOME}/bin/spark-shell --packages software.uncharted.sparkpipe:sparkpipe-core:1.1.0 --jars ~/text-example/sparkpipe-text-analytics-0.2.0.jar
 ```
 
 In the spark shell type `:paste` and paste the following code: 
 ```scala
 import software.uncharted.sparkpipe.Pipe
 import software.uncharted.sparkpipe.ops.core.{dataframe => dfo}
-import software.uncharted.sparkpipe.ops.xdata.text.analytics
+import software.uncharted.sparkpipe.ops.text.analytics
 
 val results = Pipe(spark)
 .to(dfo.io.read(

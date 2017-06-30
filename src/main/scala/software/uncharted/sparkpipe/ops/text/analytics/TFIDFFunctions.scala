@@ -26,7 +26,7 @@
  * SOFTWARE.
  */
 
-package software.uncharted.sparkpipe.ops.xdata.text.analytics
+package software.uncharted.sparkpipe.ops.text.analytics
 
 /**
   * Provides functions for evaluating term frequency (TF) and invers document frequency (IDF) in
